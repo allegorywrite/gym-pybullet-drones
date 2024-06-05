@@ -28,6 +28,8 @@ class TransportAviary(gym.Env):
                  neighbourhood_radius: float=np.inf,
                  initial_xyzs=None,
                  initial_rpys=None,
+                 initial_obj_xyzs=None,
+                 initial_obj_rpys=None,
                  physics: Physics=Physics.PYB,
                  pyb_freq: int = 240,
                  ctrl_freq: int = 240,
@@ -83,6 +85,7 @@ class TransportAviary(gym.Env):
         self.PYB_TIMESTEP = 1. / self.PYB_FREQ
         #### Parameters ############################################
         self.NUM_DRONES = num_drones
+        self.NUM_OBJECTS = 1
         self.NEIGHBOURHOOD_RADIUS = neighbourhood_radius
         #### Options ###############################################
         self.DRONE_MODEL = drone_model
@@ -205,6 +208,9 @@ class TransportAviary(gym.Env):
             self.INIT_RPYS = initial_rpys
         else:
             print("[ERROR] invalid initial_rpys in BaseAviary.__init__(), try initial_rpys.reshape(NUM_DRONES,3)")
+
+        self.INIT_OBJ_XYZS = initial_obj_xyzs
+        self.INIT_OBJ_RPYS = initial_obj_rpys
         #### Create action and observation spaces ##################
         self.action_space = self._actionSpace()
         self.observation_space = self._observationSpace()
@@ -473,6 +479,11 @@ class TransportAviary(gym.Env):
         self.rpy = np.zeros((self.NUM_DRONES, 3))
         self.vel = np.zeros((self.NUM_DRONES, 3))
         self.ang_v = np.zeros((self.NUM_DRONES, 3))
+        self.pos_obj = np.zeros((self.NUM_OBJECTS, 3))
+        self.quat_obj = np.zeros((self.NUM_OBJECTS, 4))
+        self.rpy_obj = np.zeros((self.NUM_OBJECTS, 3))
+        self.vel_obj = np.zeros((self.NUM_OBJECTS, 3))
+        self.ang_v_obj = np.zeros((self.NUM_OBJECTS, 3))
         if self.PHYSICS == Physics.DYN:
             self.rpy_rates = np.zeros((self.NUM_DRONES, 3))
         #### Set PyBullet's parameters #############################
@@ -496,15 +507,17 @@ class TransportAviary(gym.Env):
                                     physicsClientId=self.CLIENT
                                     ) for i in range(self.NUM_DRONES)])
         
-        self.BOX_ID = p.loadURDF(pkg_resources.resource_filename('gym_pybullet_drones', 'assets/box_with_attachment.urdf'),
-                                np.array([0, 0, 0.0]),  # ボックスの初期位置を棒の先端に設定
-                                p.getQuaternionFromEuler([0, 0, 0]),  # ボックスの初期姿勢を設定
-                                )
-
-        # self.BOX_ID = p.loadURDF(pkg_resources.resource_filename('gym_pybullet_drones', 'assets/box_with_rods.urdf'),
-        #                         np.array([0, 0, 0.3]),  # ボックスの初期位置を棒の先端に設定
-        #                         p.getQuaternionFromEuler([0, 0, 0]),  # ボックスの初期姿勢を設定
-        #                         )
+        if self.INIT_OBJ_XYZS is None:
+            self.BOX_ID = p.loadURDF(pkg_resources.resource_filename('gym_pybullet_drones', 'assets/box_with_attachment.urdf'),
+                                    np.array([0, 0, self.INIT_XYZS[0,2]-0.6]),  # ボックスの初期位置を棒の先端に設定
+                                    p.getQuaternionFromEuler([0, 0, 0]),  # ボックスの初期姿勢を設定
+                                    )
+        else:
+            self.BOX_ID = p.loadURDF(pkg_resources.resource_filename('gym_pybullet_drones', 'assets/box_with_attachment.urdf'),
+                                    self.INIT_OBJ_XYZS[0,:],
+                                    p.getQuaternionFromEuler(self.INIT_OBJ_RPYS[0,:]),
+                                    physicsClientId=self.CLIENT
+                                    )
 
         for i in range(self.NUM_DRONES):
             p.createConstraint(parentBodyUniqueId=self.DRONE_IDS[i],
@@ -556,6 +569,10 @@ class TransportAviary(gym.Env):
             self.pos[i], self.quat[i] = p.getBasePositionAndOrientation(self.DRONE_IDS[i], physicsClientId=self.CLIENT)
             self.rpy[i] = p.getEulerFromQuaternion(self.quat[i])
             self.vel[i], self.ang_v[i] = p.getBaseVelocity(self.DRONE_IDS[i], physicsClientId=self.CLIENT)
+
+        self.pos_obj[0], self.quat_obj[0] = p.getBasePositionAndOrientation(self.BOX_ID, physicsClientId=self.CLIENT)
+        self.rpy_obj[0] = p.getEulerFromQuaternion(self.quat_obj[0])
+        self.vel_obj[0], self.ang_v_obj[0] = p.getBaseVelocity(self.BOX_ID, physicsClientId=self.CLIENT)
     
     ################################################################################
 
@@ -597,6 +614,23 @@ class TransportAviary(gym.Env):
         """
         state = np.hstack([self.pos[nth_drone, :], self.quat[nth_drone, :], self.rpy[nth_drone, :],
                            self.vel[nth_drone, :], self.ang_v[nth_drone, :], self.last_clipped_action[nth_drone, :]])
+        return state.reshape(20,)
+    
+    ################################################################################
+
+    def _getObjStateVector(self, obj_id):
+        """Returns the state vector of the object.
+
+        Returns
+        -------
+        ndarray 
+            (20,)-shaped array of floats containing the state vector of the object.
+            Check the only line in this method and `_updateAndStoreKinematicInformation()`
+            to understand its format.
+
+        """
+        state = np.hstack([self.pos_obj[obj_id, :], self.quat_obj[obj_id, :], self.rpy_obj[obj_id, :],
+                           self.vel_obj[obj_id, :], self.ang_v_obj[obj_id, :], np.zeros(4)])
         return state.reshape(20,)
 
     ################################################################################

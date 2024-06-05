@@ -15,6 +15,8 @@ class TransportCtrlAviary(TransportAviary):
                  neighbourhood_radius: float=np.inf,
                  initial_xyzs=None,
                  initial_rpys=None,
+                 initial_obj_xyzs=None,
+                 initial_obj_rpys=None,
                  physics: Physics=Physics.PYB,
                  pyb_freq: int = 240,
                  ctrl_freq: int = 240,
@@ -59,6 +61,8 @@ class TransportCtrlAviary(TransportAviary):
                          neighbourhood_radius=neighbourhood_radius,
                          initial_xyzs=initial_xyzs,
                          initial_rpys=initial_rpys,
+                         initial_obj_xyzs=initial_obj_xyzs,
+                         initial_obj_rpys=initial_obj_rpys,
                          physics=physics,
                          pyb_freq=pyb_freq,
                          ctrl_freq=ctrl_freq,
@@ -114,7 +118,9 @@ class TransportCtrlAviary(TransportAviary):
             An ndarray of shape (NUM_DRONES, 20) with the state of each drone.
 
         """
-        return np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+        state_drones = [self._getDroneStateVector(i) for i in range(self.NUM_DRONES)]
+        state_obj = np.array([self._getObjStateVector(i) for i in range(self.NUM_OBJECTS)])
+        return np.concatenate([state_drones, state_obj], axis=0)
 
     ################################################################################
 
@@ -167,6 +173,11 @@ class TransportCtrlAviary(TransportAviary):
             Dummy value.
 
         """
+        # TODO
+        # pos_obj = np.array([self._getObjStateVector(i)[0:3] for i in range(self.NUM_OBJECTS)])
+        # if pos_obj[0, 2] < 0.1:
+        #     return True
+    
         return False
     
     ################################################################################
@@ -182,6 +193,11 @@ class TransportCtrlAviary(TransportAviary):
             Dummy value.
 
         """
+        # TODO
+        # pos_obj = np.array([self._getObjStateVector(i)[0:3] for i in range(self.NUM_OBJECTS)])
+        # if pos_obj[0, 2] < 0.1:
+        #     return True
+        
         return False
 
     ################################################################################
